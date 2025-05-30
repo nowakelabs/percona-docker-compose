@@ -19,19 +19,19 @@ services:
       - ./mysql-data:/var/lib/mysql
 
   percona-pmm-server:
-    image: percona/pmm-server:2
+    image: percona/pmm-server:latest
     container_name: percona-pmm
     restart: always
     ports:
-      - "8080:80"     # PMM web interface
-      - "8443:443"
+      - "8080:8080"     # PMM web interface
+      - "8443:8443"
     networks:
       - pmm-net
     volumes:
       - pmm-data:/srv
 
   percona-pmm-client:
-    image: percona/pmm-client:2
+    image: percona/pmm-client:latest
     container_name: pmm-client
     depends_on:
       - percona-pmm-server
@@ -39,7 +39,7 @@ services:
     networks:
       - pmm-net
     environment:
-      PMM_AGENT_SERVER_ADDRESS: percona-pmm:443
+      PMM_AGENT_SERVER_ADDRESS: percona-pmm:8443
       PMM_AGENT_SERVER_INSECURE_TLS: "1"
       PMM_AGENT_SERVER_USERNAME: admin
       PMM_AGENT_SERVER_PASSWORD: admin
@@ -52,5 +52,5 @@ services:
       /bin/bash -c "sleep 20 && \
         chmod -R 777 /usr/local/percona && \
         pmm-agent setup --force --config-file=/usr/local/percona/pmm-agent.yaml && \
-        pmm-admin config --server-url=https://admin:admin@percona-pmm:443 && \
+        pmm-admin config --server-url=https://admin:admin@percona-pmm:8443 && \
         pmm-admin add mysql --force --username=root --password=root --host=percona-mysql --port=3306 --service-name=mysql-percona; exec pmm-agent --config-file=/usr/local/percona/pmm-agent.yaml"

@@ -94,6 +94,14 @@ This repository provides a ready-to-use Docker Compose configuration for running
 - **PMM client not registering?**
   - The stack will retry registration on each start and force re-registration if needed.
   - Ensure both PMM server and MySQL are healthy.
+- **FATAL: /srv is not writable for pmm user**
+  - This means the `pmm-data` volume is not owned by UID 1000 (the `pmm` user in the container).
+  - To fix, run:
+    ```sh
+    docker run --rm -v aparavi_docker_percona_pmm-data:/srv alpine chown -R 1000:1000 /srv
+    ```
+    Replace `aparavi_docker_percona_pmm-data` with your actual volume name if different (check with `docker volume ls`).
+  - On Windows, this is the most reliable fix.
 
 ---
 
