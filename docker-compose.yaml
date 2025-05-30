@@ -1,14 +1,14 @@
 networks:
   pmm-net:
 
-volumes:
-  pmm-data:
+# All volumes are now local directory bind mounts
 
 services:
   percona-mysql:
-    image: percona:latest
+    image: percona:ps-8.0.42-33
     container_name: percona-mysql
     restart: always
+    command: mysqld --innodb_print_all_deadlocks=1 --innodb_buffer_pool_instances=16 --innodb_buffer_pool_size=4GB --disable-log-bin
     environment:
       MYSQL_ROOT_PASSWORD: root
     networks:
@@ -28,11 +28,12 @@ services:
     networks:
       - pmm-net
     volumes:
-      - pmm-data:/srv
+      - ./pmm-data:/srv
 
   percona-pmm-client:
     image: percona/pmm-client:latest
     container_name: pmm-client
+    restart: always
     depends_on:
       - percona-pmm-server
       - percona-mysql
@@ -49,8 +50,32 @@ services:
       PMM_AGENT_SETUP_METRICS_MODE: push
     user: "0:0"
     entrypoint: >
-      /bin/bash -c "sleep 20 && \
-        chmod -R 777 /usr/local/percona && \
-        pmm-agent setup --force --config-file=/usr/local/percona/pmm-agent.yaml && \
-        pmm-admin config --server-url=https://admin:admin@percona-pmm:8443 && \
-        pmm-admin add mysql --force --username=root --password=root --host=percona-mysql --port=3306 --service-name=mysql-percona; exec pmm-agent --config-file=/usr/local/percona/pmm-agent.yaml"
+      /bin/bash -c "
+        set -ex
+        # Check if setup is already done
+        if [ -f /usr/local/percona/setup_done ]; then
+          # Just run the agent normally
+          exec pmm-agent --config-file=/usr/local/percona/pmm-agent.yaml
+        else
+          # First time setup
+          sleep 20
+          chmod -R 777 /usr/local/percona
+          pmm-agent setup --force --config-file=/usr/local/percona/pmm-agent.yaml
+          
+          # Start agent in background for admin commands
+          pmm-agent --config-file=/usr/local/percona/pmm-agent.yaml &
+          
+          # Wait for agent to initialize
+          sleep 10
+          
+          # Run admin commands
+          pmm-admin config --server-url=https://admin:admin@percona-pmm:8443 --server-insecure-tls
+          pmm-admin add mysql --username=root --password=root --host=percona-mysql --port=3306 --service-name=mysql-percona --skip-connection-check --query-source=perfschema
+          
+          # Mark setup as done
+          touch /usr/local/percona/setup_done
+          
+          # Exit and let Docker restart us
+          exit 0
+        fi
+      "
